@@ -1,13 +1,13 @@
 " unicodePlugin : A completion plugin for Unicode glyphs
 " Author: C.Brabandt <cb@256bit.org>
-" Version: 0.9
+" Version: 0.10
 " Copyright: (c) 2009 by Christian Brabandt
 "            The VIM LICENSE applies to unicode.vim, and unicode.txt
 "            (see |copyright|) except use "unicode" instead of "Vim".
 "            No warranty, express or implied.
 "  *** ***   Use At-Your-Own-Risk!   *** ***
 "
-" GetLatestVimScripts: 2822 9 :AutoInstall: unicode.vim
+" GetLatestVimScripts: 2822 10 :AutoInstall: unicode.vim
 
 " ---------------------------------------------------------------------
 
@@ -134,7 +134,11 @@ fu! unicode#CompleteUnicode(findstart,base) "{{{1
 		endif
 		let istring=printf("U+%04X %s%s:'%s'", value, key, empty(dg_char) ? '' : '('.dg_char.')', nr2char(value))
 	    
-    	call complete_add({'word':nr2char(value), 'abbr':fstring, 'info': istring})
+		if s:unicode_complete_name
+			call complete_add({'word':key, 'abbr':fstring, 'info': istring})
+		else
+			call complete_add({'word':nr2char(value), 'abbr':fstring, 'info': istring})
+		endif
 		if complete_check()
 			break
 		endif
@@ -196,7 +200,23 @@ fu! unicode#CompareList(l1, l2) "{{{1
     return a:l1[1] == a:l2[1] ? 0 : a:l1[1] > a:l2[1] ? 1 : -1
 endfu
 
+fu! unicode#SwapCompletion() "{{{1
+	if !exists('s:unicode_complete_name')
+		let s:unicode_complete_name = 1
+	endif
+	if exists('g:unicode_complete_name')
+		let s:unicode_complete_name = g:unicode_complete_name
+	else
+		let s:unicode_complete_name = !s:unicode_complete_name
+	endif
+	echo "Unicode Completion Names " .
+		\ (s:unicode_complete_name ? 'ON':'OFF')
+endfu
+
 fu! unicode#Init(enable) "{{{1
+	if !exists("s:unicode_complete_name")
+		let s:unicode_complete_name = 0
+	endif
     if a:enable
 		let b:oldfunc=&l:cfu
 		if (unicode#CheckDir())
@@ -204,12 +224,17 @@ fu! unicode#Init(enable) "{{{1
 			setl completefunc=unicode#CompleteUnicode
 			set completeopt+=menuone
 			inoremap <C-X><C-G> <C-R>=unicode#CompleteDigraph()<CR>
+			nnoremap <leader>un :call unicode#SwapCompletion()<CR>
 		endif
     else
 		if !empty(b:oldfunc)
 			let &l:cfu=b:oldfunc
+		else
+			setl completefunc=
 		endif
 		unlet s:UniDict
+		nunmap <leader>un
+		iunmap <C-X><C-G>
     endif
 	echo "Unicode Completion " . (a:enable?'ON':'OFF')
 endfu
