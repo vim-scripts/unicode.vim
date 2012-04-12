@@ -1,13 +1,13 @@
 " unicodePlugin : A completion plugin for Unicode glyphs
 " Author: C.Brabandt <cb@256bit.org>
-" Version: 0.10
+" Version: 0.12
 " Copyright: (c) 2009 by Christian Brabandt
 "            The VIM LICENSE applies to unicode.vim, and unicode.txt
 "            (see |copyright|) except use "unicode" instead of "Vim".
 "            No warranty, express or implied.
 "  *** ***   Use At-Your-Own-Risk!   *** ***
 "
-" GetLatestVimScripts: 2822 10 :AutoInstall: unicode.vim
+" GetLatestVimScripts: 2822 12 :AutoInstall: unicode.vim
 
 " ---------------------------------------------------------------------
 
@@ -175,10 +175,21 @@ endfu
 
 fu! unicode#CompleteDigraph() "{{{1
    let prevchar=getline('.')[col('.')-2]
+   let prevchar1=getline('.')[col('.')-3]
    let dlist=unicode#GetDigraph()
    if prevchar !~ '\s' && !empty(prevchar)
-       let dlist=filter(dlist, 'v:val =~ "^".prevchar')
-       let col=col('.')-1
+	   let filter1 =  '( v:val[0] == prevchar1 && v:val[1] == prevchar)'
+	   let filter2 = 'v:val[0] == prevchar || v:val[1] == prevchar'
+
+	   let dlist1 = filter(copy(dlist), filter1)
+	   if empty(dlist1)
+		   let dlist = filter(dlist, filter2)
+		   let col=col('.')-1
+	   else
+		   let dlist = dlist1
+		   let col=col('.')-2
+	   endif
+	   unlet dlist1
    else
        let col=col('.')
    endif
@@ -186,11 +197,12 @@ fu! unicode#CompleteDigraph() "{{{1
    for args in dlist
        let t=matchlist(args, '^\(..\)\s<\?\(..\?\)>\?\s\+\(\d\+\)$')
        "echo args
-       "if !empty(t)
-	   let format=printf("'%s' %s U+%04X",t[1], t[2], t[3])
-	   call add(tlist, {'word':nr2char(t[3]), 'abbr':format,
-				   \'info': printf("Abbrev\tGlyph\tCodepoint\n%s\t%s\tU+%04X",t[1],t[2],t[3])})
-       "endif
+       if !empty(t)
+		let format=printf("'%s' %s U+%04X",t[1], t[2], t[3])
+		call add(tlist, {'word':nr2char(t[3]), 'abbr':format,
+			\ 'info': printf("Abbrev\tGlyph\tCodepoint\n%s\t%s\tU+%04X",
+			\ t[1],t[2],t[3])})
+       endif
    endfor
    call complete(col, tlist)
    return ''
@@ -240,6 +252,7 @@ fu! unicode#Init(enable) "{{{1
 endfu
 
 fu <sid>OutputMessage(msg) " {{{1
+	redraw
 	echohl Title
 	echo a:msg
 	echohl Normal
@@ -260,6 +273,7 @@ fu! unicode#GetUniChar() "{{{1
 			call <sid>OutputMessage("No character under cursor!")
 			return
 		endif
+		let dlist = unicode#GetDigraph()
 		" Split string, in case cursor was on a combining char
 		for item in split(a, 'Octal \d\+\zs \?')
 
@@ -275,8 +289,15 @@ fu! unicode#GetUniChar() "{{{1
 			else
 				for [key, value] in items(s:UniDict)
 					if value == dec
+						let dig = filter(copy(dlist), 'v:val =~ ''\D''.dec.''$''')
+						if !empty(dig)
+							let dchar = printf("(%s)", dig[0][0:1])
+						else
+							let dchar = ''
+						endif
 						call <sid>OutputMessage(
-							\printf("'%s' U+%04X %s", glyph, value, key))
+							\ printf("'%s' U+%04X %s %s", glyph, value, key,
+							\ dchar))
 						break
 					endif
 				endfor
