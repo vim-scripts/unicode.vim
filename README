@@ -1,5 +1,10 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=2822
 
+Basically, this plugin serves 3 purposes:
+1) it provides the possibility to complete characters using their Unicode Name or the Unicode Codepoint
+2) It can be used to identify the character under the Cursor using the :UnicodeName command
+3) It eases the use of digraphs, by providing the :Digraphs command (so one can more easily find a specific digraph).
+
 For a screenshot, see: http://www.256bit.org/~chrisbra/vim_unicode.png
 
 
