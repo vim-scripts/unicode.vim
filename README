@@ -1,100 +1,40 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=2822
 
 Basically, this plugin serves 3 purposes:
-1) it provides the possibility to complete characters using their Unicode Name or the Unicode Codepoint
-2) It can be used to identify the character under the Cursor using the :UnicodeName command
-3) It eases the use of digraphs, by providing the :Digraphs command (so one can more easily find a specific digraph).
 
-For a screenshot, see: http://www.256bit.org/~chrisbra/vim_unicode.png
+1. Complete Characters
 
+A custom completion function is available to complete characters using their Unicode name or Codepoint. If a digraph exists for that character, it will be displayed in paranthesis. Press Ctrl-X Ctrl-Z to trigger this completion from insert mode. Also a new custom completion for digraph chars is available. Press Ctrl-X Ctrl-G to trigger this completion. It will display all digraphs, that are reachable from the previous typed letter.
 
-                                                              *unicode-plugin*
-1. Functionality
+2. Identify Characters
 
-This plugin was written to enable an easier use of any Unicode glyph
-available. The unicode.vim Plugin uses the data available from the Unicode
-Consortium's website (http://www.unicode.org) to let you enter Unicode
-characters using a completion function.
+The :UnicodeName command can be used to identify the character under the cursor. This works similar to the builtin ga command (in fact, the help also states a possibility to map this command to the ga builtin command), but it also displays the digraph character (if it exists) and the HTML entity.
+The :SearchUnicode command can be used to search in the unicode character table to search for a certain unicode character with a given name or value.
+The :UnicodeTable can be used to generate an Unicode table, including HTML entity names and Digraph chars. The UnicodeTable will be nicely syntax highlighted.
 
-By default, the plugin creates a directory unicode below the path autoload
-where this plugin is located. Within this directory it will store  the file
-Index.txt from http://www.unicode.org/Public/UNIDATA/Index.txt which it will
-try to download using *netrw* . If this is unsuccessfull, or you do not have
-|netrw| enabled, dowload the file manually and save it in the unicode
-directory below the autoload directory in which unicode.vim is located.
+3. Ease the use of Digraphs
 
+Use the :Digraphs command to search for an digraph with the given name (e.g. :Digraphs copy will display all digraphs that will create a character name which contains copy in its name). You can also search for the decimal value. This plugin also maps the key <F4> that will allow to transform 2 given normal chars into their digraph char.
 
-						 *:EnableUnicodeCompletion*
-By default the plugin is not enabled. To enable it enter
-:EnableUnicodeCompletion
-When you run this command, *unicode.vim* checks for the availability of
-Index.txt from the Unicode Consortium, and if it is not available, it will try
-to download it. 
+For a screenshot, see: https://github.com/chrisbra/unicode.vim/blob/master/screencast.gif
+Note: the development version of this plugin is available at github: https://github.com/chrisbra/unicode.vim
 
-This will also set up the completion function |completefunc| to use for your
-buffer. You can use |i_CTRL-X_CTRL-U| then to start the completion. 
+Here is a short overview of the functionality provided by the plugin:
 
-						 *:DisableUnicodeCompletion*
-If you want to disable the plugin, enter
-:DisableUnicodeCompletion
+Ex commands:
+    :Digraphs        - Search for specific digraph char
+    :SearchUnicode   - Search for specific unicode char
+    :UnicodeName     - Identify character under cursor (like ga command)
+    :UnicodeTable    - Print Unicode Table in new window
+    :DownloadUnicode - Download (or update) Unicode data
 
-						    *unicode-plugin-usage*
-If you have enabled the plugin using |:EnableUnicodeCompletion| then there are
-2 possibilities to use the plugin. You can either enter the Unicode Character
-name, or enter the Unicode-Codeposition.
+Normal mode commands:
+    <C-X><C-G>  - Complete Digraph char
+    <C-X><C-Z>  - Complete Unicode char
+    <F4>        - Combine characters into digraphs
 
-For example, you would like to enter Æ, so you enter AE and press <C-X><C-U>
-while in insert mode. Alternatively you can enter the Unicode-Codepoint: U+C6
-and press <C-X><C-U> and the popup menu will show you all characters, that
-have a codepoint like C6 with leading zeros, eg. U+00C6 and U+0C66
-
-A popup menu will appear, showing you the Unicode-Codeposition value, the
-Unicode Character Name and the Unicode Character (and if you have enabled it,
-it can also show you the digraph characters needed to create this character in
-paranthesis, see |unicode-plugin-config| ). You can scroll down in the menu by
-pressing <C-N> and up by pressing <C-P>.
-
-
-						    *unicode-plugin-config*
-The plugin can be customized to include the 2 digraph characters you have to
-type, to get that character. This works only, if there is a digraph defined
-for that Unicode char. If you would like this you need to set
-g:showDigraphCode, e.g.
-:let g:showDigraphCode=1
-This functionality is by default disabled, cause it seems to cause some delay
-and screen-rendering errors in the menu. Enter
-:let g:showDigraphCode=0
-to disable the Digraph feature afterwards.
-
-If you would like to specify a different URL from which to download Index.txt,
-enter the URL as:
-:let g:unicode_URL='http:....'
-To force downloading the file from that new url, enter
-:call unicode#CheckUniFile(1)
-
-						     *unicode-plugin-error*
-If the plugin gives an error, first check, that Index.txt from the Unicode
-Consortium has been successfully downloaded. It should look something like
-this:
-A WITH ACUTE, LATIN CAPITAL LETTER	00C1
-A WITH ACUTE, LATIN SMALL LETTER	00E1
-A WITH BREVE, LATIN SMALL LETTER	0103
-A WITH CARON, LATIN SMALL LETTER	01CE
-A WITH CIRCUMFLEX, LATIN CAPITAL LETTER	00C2
-A WITH CIRCUMFLEX, LATIN SMALL LETTER	00E2
-A WITH DIAERESIS, LATIN CAPITAL LETTER	00C4
-A WITH DIAERESIS, LATIN SMALL LETTER	00E4
-A WITH DOT ABOVE, LATIN SMALL LETTER	0227
-A WITH DOT BELOW, LATIN SMALL LETTER	1EA1
-A WITH DOUBLE GRAVE, LATIN SMALL LETTER	0201
-A WITH GRAVE, LATIN CAPITAL LETTER	00C0
-[...]
-(several thounsand lines following)
-
-elinks is known to mangle that file and make it unusable, so please check
-first if the format is right.
-
-If the file looks correct, and the plugin is still not working correctly
-contact the maintainer. You'll find his email-adress in the first line of this
-document. Please be patient, it might take a while, until I can take care of
-your report.
+Scripting Functions:
+    unicode#FindUnicodeBy() - Find unicode characters
+    unicode#FindDigraphBy() - Find Digraph char
+    unicode#Digraph()       - Returns digraph char
+    unicode#UnicodeName()   - Identifies unicode character (by value)
