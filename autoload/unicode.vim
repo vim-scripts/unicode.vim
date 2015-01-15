@@ -1,21 +1,21 @@
 " unicodePlugin : A completion plugin for Unicode glyphs
 " Author: C.Brabandt <cb@256bit.org>
-" Version: 0.19
+" Version: 0.20
 " Copyright: (c) 2009-2014 by Christian Brabandt
 "            The VIM LICENSE applies to unicode.vim, and unicode.txt
 "            (see |copyright|) except use "unicode" instead of "Vim".
 "            No warranty, express or implied.
 "  *** ***   Use At-Your-Own-Risk!   *** ***
-" GetLatestVimScripts: 2822 19 :AutoInstall: unicode.vim
+" GetLatestVimScripts: 2822 20 :AutoInstall: unicode.vim
 " ---------------------------------------------------------------------
 
-" TEST VERSION: Stores unicode in different format (look at new generated cache file)
-
 " initialize Variables {{{1
-let s:unicode_URL = get(g:, 'Unicode_URL',
-    \ 'http://www.unicode.org/Public/UNIDATA/UnicodeData.txt')
-let s:directory   = expand("<sfile>:p:h")."/unicode"
-let s:UniFile     = s:directory . '/UnicodeData.txt'
+let s:unicode_URL  = get(g:, 'Unicode_URL',
+        \ 'http://www.unicode.org/Public/UNIDATA/UnicodeData.txt')
+let s:directory    = expand("<sfile>:p:h")."/unicode"
+let s:UniFile      = s:directory . '/UnicodeData.txt'
+" patch 7.3.713 introduced the %S modifier for printf
+let s:printf_S_mod = (v:version == 703 && !has("patch713")) || v:version < 703
 
 " HTML entitities {{{2
 let s:html = {}
@@ -284,18 +284,21 @@ endfu
 fu! unicode#FindUnicodeBy(match) "{{{2
     return <sid>FindUnicodeByInternal(a:match)
 endfu
-fu! unicode#Digraph(char1, char2) "{{{2
-    if empty(a:char1) || empty(a:char2)
+fu! unicode#Digraph(char) "{{{2
+    let c=split(a:char, '\zs')
+    if len(c) > 2 || len(c) < 2
+        call <sid>WarningMsg('Need exactly 2 chars for returning digraphs!')
         return ''
     endif
-    let s=''
+    let s:digraph=''
     " How about a digrpah() function?
     " already sent a patch to Bram
-    exe "sil! norm! :let s.='\<c-k>".a:char1.a:char2."'\<cr>"
-    if s == a:char1
+    " exe "sil! norm! :let s.='\<c-k>".a:char1.a:char2."'\<cr>"
+    exe 'norm!' ":\<C-k>".c[0].c[1]."\<c-\>eextend(s:, {'digraph': getcmdline()}).digraph\n"
+    if s:digraph ==? c[0] || s:digraph ==? c[1]
         return ''
     endif
-    return (s ==# a:char1 ? '' : s)
+    return s:digraph
 endfu
 fu! unicode#UnicodeName(val) "{{{2
     return <sid>GetUnicodeName(a:val)
@@ -361,7 +364,7 @@ fu! unicode#CompleteUnicode() "{{{2
         endif
         echom printf('(Checking Unicode Names for "%s"... this might be slow)', base)
     endif
-    let compl = <sid>AddCompleteEntries(complete_list, numeric)
+    let compl = <sid>AddCompleteEntries(complete_list)
     call complete(start+1, compl)
     return ""
 endfu
@@ -434,9 +437,12 @@ fu! unicode#GetUniChar(...) "{{{2
         endif
     finally
         let start      = 1
+        let s:output_width=1
         for val in msg
             let l=split(val)
-            call <sid>ScreenOutput((start ? 0 : 1), l[0], ' '.join(l[1:]))
+            call <sid>ScreenOutput(l[0], ' '.join(l[1:]))
+            " force linebreak
+            let s:output_width=&columns
             let start = 0
         endfor
     endtry
@@ -445,40 +451,34 @@ fu! unicode#PrintDigraphs(match, bang) "{{{2
     " outputs only first digraph that exists for char
     " makes a difference for e.g. Euro which has (=e Eu)
     let digraphs = <sid>DigraphsInternal(a:match)
-    let screenwidth = 0
-    let format = ['%s',' %s %s ']
-    let start = 1
+    let s:output_width=1
 
     for item in digraphs
-        let output = printf(format[0].format[1], split(item.dig)[0], item.glyph, item.decimal)
-        " if the output is too wide, echo a linebreak
-        if screenwidth + <sid>Screenwidth(output) >= &columns
-            \ || (!empty(a:bang) && start == 0)
-            let screenwidth = 0
-        endif
+        " remove paranthesis
         let item.dig = substitute(item.dig, '^.\|.$', '', 'g')
-        let screenwidth += <sid>ScreenOutput(
-                \ (start == 0 && screenwidth == 0 ? 1 : 0), item.glyph,
-                \ printf(format[1], split(item.dig)[0], item.decimal))
-        let start = 0
+        call <sid>ScreenOutput(item.glyph, printf(' %s %s ', item.dig, item.dec))
+        if !empty(a:bang)
+            " force linebreak
+            call <sid>ScreenOutput(printf(' (%s)', item.name))
+            let s:output_width=&columns
+        endif
     endfor
 endfu
 fu! unicode#PrintUnicode(match) "{{{2
     let uni    = <sid>FindUnicodeByInternal(a:match)
-    let format = ["% 4S\t", "Dec:%06d, Hex:%06X\t", ' %s']
-    let i      = 0
-    if (v:version == 703 && !has("patch713")) || v:version < 703
-        " patch 7.3.713 introduced the %S modifier for printf
+    let format = ["% 4S\t", "U+%04X Dec:%06d\t", ' %s']
+    if s:printf_S_mod
         let format[0] = substitute(format[0], 'S', 's', '')
     endif
-    for item in sort(uni, '<sid>CompareListsByHex')
+    let s:output_width = 1
+    for item in uni
         let dig  = get(item, 'dig' , '')
         let html = get(item, 'html', '')
-        call <sid>ScreenOutput(i<len(uni) && i > 0, printf(format[0], item.glyph),
+        call <sid>ScreenOutput(printf(format[0], item.glyph),
                 \ printf(format[1].format[2], item.dec, item.dec, item.name),
                 \ (empty(dig)  ? [] : printf(" %s", dig)),
                 \ (empty(html) ? [] : printf(" %s", html)))
-        let i+=1
+        let s:output_width = &columns
     endfor
 endfu
 fu! unicode#GetDigraph(type, ...) "{{{2
@@ -519,7 +519,7 @@ fu! unicode#GetDigraph(type, ...) "{{{2
         if exists("char0") && exists("char1")
             " How about a digraph() function?
             " e.g. :let s.=digraph(char[0], char[1])
-            let s.=unicode#Digraph(char0, char1)
+            let s.=unicode#Digraph(char0.char1)
         endif
         unlet! char0 char1
     endw
@@ -545,11 +545,11 @@ fu! unicode#PrintUnicodeTable() "{{{2
     " Just in case
     silent %d _
     " Set up some options 
-    setl noswapfile buftype=nofile foldcolumn=0 nobuflisted bufhidden=wipe
+    setl noswapfile buftype=nofile foldcolumn=0 nobuflisted bufhidden=wipe nowrap
     if !exists("s:UniDict")
         let s:UniDict=<sid>UnicodeDict()
     endif
-    call append(1, printf("%-6s\t%-8s%-10s%-57s%s",
+    call append(1, printf("%-7s%-8s%-10s%-57s%s",
             \ "Char","Codept","Html", "Name (Digraph)", "Link"))
     let output = []
     for [value,name] in items(s:UniDict) " sort is done later, for performance reasons
@@ -557,17 +557,27 @@ fu! unicode#PrintUnicodeTable() "{{{2
         let dig     = <sid>GetDigraphChars(value)
         let html    = <sid>GetHtmlEntity(value)
         let codep   = printf('U+%04X', value)
-        let output += [printf("%-6s\t%-8s%-10s%-57shttp://unicode-table.com/en/%04X/",
+        let output += [printf("%-7s%-8s%-10s%-57shttp://unicode-table.com/en/%04X/",
                     \ strtrans(nr2char(value)), codep, html, name.dig, value)]
     endfor
     call append('$', output)
-    3,$sort x /^[^\t]*\tU+/
+    3,$sort x /^.\{,8}U+/
+    setl nomodified
+    augroup UnicodeTable
+        au!
+        au QuitPre <buffer> :q!
+    augroup end
     :noa 1
 endfu
-fu! <sid>AddCompleteEntries(dict, numeric) "{{{2
+fu! <sid>AddCompleteEntries(dict) "{{{2
     let compl=[]
+    let prev_fmt="Glyph\tCodepoint\tName\n%s\tU+%04X\t\t%s"
     let starttime = localtime()
-    for [value, name] in sort(items(a:dict), "<sid>CompareList")
+    for value in sort(keys(a:dict), '<sid>CompareListByDec')
+        if value==0
+            continue " Skip NULLs, does not display correctly
+        endif
+        let name = a:dict[value]
         let dg_char=<sid>GetDigraphChars(value)
         let fstring = printf("U+%04X %s%s:'%s'",
                 \ value, name, dg_char, nr2char(value))
@@ -577,12 +587,11 @@ fu! <sid>AddCompleteEntries(dict, numeric) "{{{2
             let dict = {'word':nr2char(value), 'abbr':fstring}
         endif
         if get(g:,'Unicode_ShowPreviewWindow',0)
-            call extend(dict, {'info': printf(prev_fmt, nr2char(value),value,
-                    \ substitute(dg_char, '(\(..\).*', '\1', ''), name)})
+            call extend(dict, {'info': printf(prev_fmt, nr2char(value),value,name)})
         endif
         call add(compl, dict)
         " break too long running search
-        if localtime() - starttime > 2
+        if localtime() - starttime > 5
             echohl WarningMsg
             echom "Completing takes too long, stopping now..."
             echohl Normal
@@ -593,21 +602,23 @@ fu! <sid>AddCompleteEntries(dict, numeric) "{{{2
 endfu
 fu! <sid>AddDigraphCompleteEntries(list) "{{{2
     let list = []
-    for args in sort(a:list, '<sid>CompareDigraphs')
+    for args in a:list
         for item in args
             let t=matchlist(item, '^\(..\)\s<\?\(..\?\)>\?\s\+\(\d\+\)$')
             let prev_fmt="Abbrev\tGlyph\tCodepoint\tName\n%s\t%s\tU+%04X\t\t%s"
             if !empty(t)
-                let format = printf("'%s' %s U+%04X",t[1], t[2], t[3])
+                let name   = <sid>GetUnicodeName(t[3])
+                let format = printf("'%s' %s U+%04X %s",t[1], t[2], t[3],name)
                 if t[3] == 0 " special case: NULL
                     let t[3] = 10
                 endif
-                call add(list, {'word':nr2char(t[3]), 'abbr':format,
-                    \ 'info': printf(prev_fmt, t[1],t[2],t[3],<sid>GetUnicodeName(t[3]))})
+                " Dec key will be ignored by complete() function
+                call add(list, {'word':nr2char(t[3]), 'abbr':format, 'dec': t[3],
+                    \ 'info': printf(prev_fmt, t[1],t[2],t[3],name)})
             endif
         endfor
     endfor
-    return list
+    return sort(list, '<sid>CompareByDecimalKey')
 endfu
 fu! <sid>DigraphsInternal(match) "{{{2
     let outlist = []
@@ -615,17 +626,15 @@ fu! <sid>DigraphsInternal(match) "{{{2
     let name = ''
     let unidict = {}
     let tchar = {}
-    if (len(a:match > 1 && digit == 0) || print_out == 0)
+    if (len(a:match > 1 && digit == 0))
         " try to match digest name from unicode name
         if !exists("s:UniDict")
             let s:UniDict = <sid>UnicodeDict()
         endif
-    endif
-    if (len(a:match) > 1 && digit == 0)
         let name    = a:match
         let unidict = filter(copy(s:UniDict), 'v:val =~? name')
     endif
-    for dig in sort(values(<sid>GetDigraphDict()), '<sid>CompareDigraphs')
+    for dig in values(<sid>GetDigraphDict())
         " display digraphs that match value
         if dig[0] !~# a:match && digit == 0 && empty(unidict)
             continue
@@ -651,16 +660,16 @@ fu! <sid>DigraphsInternal(match) "{{{2
             let item[2].= ' '
         endif
 
-        let dict         = {}
+        let dict       = {}
         " Space is different
-        let dict.glyph   = item[3] != 32 ? matchstr(item[2],'\s\?\S*\ze\s*$') : '  '
-        let dict.dig     = <sid>GetDigraphChars(item[3])
-        let dict.decimal = item[3]
-        let dict.hex     = printf("0x%02X", item[3])
-        let dict.name    = <sid>GetUnicodeName(item[3])
+        let dict.glyph = item[3] != 32 ? matchstr(item[2],'\s\?\S*\ze\s*$') : '  '
+        let dict.dig   = <sid>GetDigraphChars(item[3])
+        let dict.dec   = item[3]
+        let dict.hex   = printf("0x%02X", item[3])
+        let dict.name  = <sid>GetUnicodeName(item[3])
         call add(outlist, dict)
     endfor
-    return outlist
+    return sort(outlist, '<sid>CompareByDecimalKey')
 endfu
 fu! <sid>FindUnicodeByInternal(match) "{{{2
     let digit = a:match + 0
@@ -679,7 +688,7 @@ fu! <sid>FindUnicodeByInternal(match) "{{{2
     endif
     if (digit == 0 && empty(name))
         echoerr "No argument was specified!"
-        return
+        return []
     endif
     if !empty(name)
         let unidict = filter(copy(s:UniDict), 'v:val =~? name')
@@ -687,13 +696,13 @@ fu! <sid>FindUnicodeByInternal(match) "{{{2
         " filter for decimal value
         let unidict = filter(copy(s:UniDict), 'v:key == digit')
     endif
-    for [decimal, name] in items(unidict)
+    for decimal in keys(unidict)
         " Try to get digraph char
         let dchar=<sid>GetDigraphChars(decimal)
         " Get html entity
         let html          = <sid>GetHtmlEntity(decimal)
         let dict          = {}
-        let dict.name     = name
+        let dict.name     = s:UniDict[decimal]
         let dict.glyph    = nr2char(decimal)
         let dict.dec      = decimal
         let dict.hex      = printf("0x%02X", decimal)
@@ -705,7 +714,7 @@ fu! <sid>FindUnicodeByInternal(match) "{{{2
         endif
         call add(output, dict)
     endfor
-    return output
+    return sort(output, '<sid>CompareByDecimalKey')
 endfu
 fu! <sid>Screenwidth(item) "{{{2
     " Takes string arguments and calculates the width
@@ -804,37 +813,30 @@ fu! <sid>GetDigraphDict() "{{{2
         return s:digdict
     endif
 endfu
-fu! <sid>CompareList(l1, l2) "{{{2
-    return <sid>CompareByValue((a:l1[0]+0),(a:l2[0]+0))
-endfu
-fu! <sid>CompareDigraphs(d1, d2) "{{{2
-    let d1=matchstr(a:d1[0], '\d\+$')+0
-    let d2=matchstr(a:d2[0], '\d\+$')+0
-    return <sid>CompareByValue(d1,d2)
+fu! <sid>CompareByDecimalKey(d1, d2) "{{{2
+    return <sid>CompareByValue(a:d1['dec']+0, a:d2['dec']+0)
 endfu
 fu! <sid>CompareListByDec(l1, l2) "{{{2
     return <sid>CompareByValue(a:l1+0,a:l2+0)
-endfu
-fu! <sid>CompareListsByHex(l1, l2) "{{{2
-    let d1 = str2nr(a:l1["hex"], 16)
-    let d2 = str2nr(a:l2["hex"], 16)
-    return <sid>CompareByValue(d1,d2)
 endfu
 fu! <sid>CompareByValue(v1, v2) "{{{2
     return (a:v1 == a:v2 ? 0 : (a:v1 > a:v2 ? 1 : -1))
 endfu
 fu! <sid>ScreenOutput(...) "{{{2
-    if a:1 "first argument indicates whether we need a linebreak
-        echon "\n"
-    endif
-    let list=filter(a:000[1:], '!empty(v:val)')
+    let list=filter(copy(a:000), '!empty(v:val)')
     let i=0
+    let width = eval(join(map(copy(list), '<sid>Screenwidth(v:val)'), '+'))
+    if s:output_width + width >= &columns
+        echon "\n"
+        let s:output_width = width+1
+    else
+        let s:output_width += width
+    endif
     for value in list
         exe "echohl ". (i ? "Normal" : "Title")
         echon value
-        let i+=<sid>Screenwidth(value)
+        let i+=1
     endfor
-    return i
 endfu
 fu! <sid>WarningMsg(msg) "{{{2
     echohl WarningMsg
@@ -864,7 +866,8 @@ fu! <sid>UnicodeWriteCache(data, ind) "{{{2
         \ '" this file can safely be removed, it will be recreated if needed',
         \ '',
         \ 'let unicode#unicode#data = {}']
-    let list += map(copy(a:ind), '"let unicode#unicode#data[".v:val."] = ''".a:data[v:val]."''"')
+    let format = "let unicode#unicode#data[0x%04X] = '%s'"
+    let list += map(copy(a:ind), 'printf(format, v:val, a:data[v:val])')
     call writefile(list, s:directory. '/UnicodeData.vim')
     unlet! list
 endfu
